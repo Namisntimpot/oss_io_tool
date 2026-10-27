@@ -20,7 +20,11 @@ from oss_io_tool.publisher import ArtifactPublisher
 旧代码在仅安装本包的环境仍可 `import nsl_io`，两者共享同一模块、默认 IO、
 ContextVar 和子模块；不会创建第二套上传队列。旧的 NSL 环境变量继续支持，新 OSS_IO 变量优先。
 
-发布队列会即时记录后台失败；本地大文件上传使用 SDK 文件上传器的整体 CRC 校验。
+已同步 `nsl_io` 的大文件上传修复：达到 64 MiB 自动分片，默认 64 MiB 分片，
+本地大文件上传使用 SDK 文件上传器的整体 CRC 校验；开启 `record_writes=True` 仍然流式上传，
+摘要以分块读取计算。发布队列会即时记录后台失败并保留源文件。
+`tests/test_nsl_large_upload_regressions.py` 移植原仓库的对应回归测试，覆盖超过 5 GiB 的稀疏文件、
+同对象写入排序、条件写入、失败清理及后台异常传播。
 
 NSLv2 工作树中的原实现暂时保留，以免现有训练部署因为未安装外部包而中断。
 后续迁移时先在部署镜像/环境安装这个独立包，再统一替换 imports 或移除本地同名目录。

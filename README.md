@@ -233,7 +233,7 @@ copy_file('/path/to/large-checkpoint.pt', 'oss://my-bucket/checkpoint.pt')
 ```
 
 `write_bytes`、`write_text`、`open_file` 写入、各格式保存器和 `write_object` 共用上传策略；
-`copy_file` 和 CLI 的 OSS 目标同样处理大文件。小对象简单上传，超过内部阈值自动分片，
+`copy_file` 和 CLI 的 OSS 目标同样处理大文件。小对象简单上传，达到内部阈值自动分片，
 SDK 负责重试、校验、合并及失败时清理未完成分片。上传完成前不会发布完成标记。
 
 不要为了普通使用编写 SDK 分片逻辑。OSS 单次 PutObject 的 5 GiB 限制、分片数上限、
@@ -258,7 +258,7 @@ python -m build
 ```
 
 测试使用真实 SDK 请求模型和内存中的 OSS 替身，不需要云端凭据，不访问真实 bucket。
-大对象测试通过缩小内部分片阈值以及虚拟尺寸验证路径选择，不会分配 5 GiB 内存。
+大对象测试通过缩小内部分片阈值及超过 5 GiB 的稀疏文件验证完整上传流程，不会分配 5 GiB 内存。
 可选的 PyTorch 测试在未安装时跳过。
 
 完整接口见 [API 速查](docs/api.md)，来源与迁移说明见 [EXTRACTION.md](EXTRACTION.md)。

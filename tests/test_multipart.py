@@ -26,10 +26,6 @@ class MultipartOSS(FakeOSS):
         self.initiated = None
         self.options = None
 
-    def uploader(self, **kwargs):
-        self.options = kwargs
-        return Uploader(self, **kwargs)
-
     def put_object(self, request):
         self.events.append('put')
         if request.forbid_overwrite and (request.bucket, request.key) in self.objects:
@@ -72,6 +68,10 @@ def multipart(monkeypatch):
     monkeypatch.setattr(upload_module, '_SINGLE_PUT_LIMIT', 16)
     monkeypatch.setattr(upload_module, '_MIN_PART_SIZE', 8)
     monkeypatch.setattr(upload_module, '_PART_ALIGNMENT', 1)
+    def uploader(client, **kwargs):
+        client.options = kwargs
+        return Uploader(client, **kwargs)
+    monkeypatch.setattr(oss, 'Uploader', uploader)
     return MultipartOSS()
 
 
@@ -84,8 +84,8 @@ def test_simple_and_multipart_boundary(multipart, size, asynchronous):
         if future is not None:
             future.result(timeout=5)
         assert S.read_bytes('oss://bucket/data') == data
-    assert ('complete' in multipart.events) == (size > 16)
-    assert ('put' in multipart.events) == (size <= 16)
+    assert ('complete' in multipart.events) == (size >= 16)
+    assert ('put' in multipart.events) == (size < 16)
 
 
 @pytest.mark.parametrize('fail', ['part', 'complete'])
@@ -151,10 +151,9 @@ def test_nonseekable_copy_uses_bounded_sequential_upload(multipart):
 
 def test_virtual_size_over_five_gib_never_uses_simple_put(monkeypatch):
     calls = []
-    client = SimpleNamespace(
-        put_object=lambda request: pytest.fail('oversized PutObject'),
-        uploader=lambda **kwargs: SimpleNamespace(
-            upload_from=lambda request, reader: calls.append((kwargs, reader))))
+    client = SimpleNamespace(put_object=lambda request: pytest.fail('oversized PutObject'))
+    monkeypatch.setattr(oss, 'Uploader', lambda client, **kwargs: SimpleNamespace(
+        upload_from=lambda request, reader: calls.append((kwargs, reader))))
     upload_function(client, oss.PutObjectRequest(bucket='bucket', key='large'), io.BytesIO(), (5 << 30) + 1)
     assert len(calls) == 1
     assert calls[0][0]['part_size'] <= 5 << 30

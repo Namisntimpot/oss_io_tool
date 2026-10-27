@@ -267,10 +267,14 @@ class IO:
                 os.replace(temporary, p)
             finally:
                 LocalPath(temporary).unlink(missing_ok=True)
+        self._record_write(path, len(data),
+                           hashlib.md5(data).hexdigest() if self._record_writes else None)
+
+    def _record_write(self, path, size, digest=None):
         with self._lock:
-            self.bytes_written += len(data)
+            self.bytes_written += size
             if self._record_writes:
-                self.written_objects[path] = {"size": len(data), "md5": hashlib.md5(data).hexdigest()}
+                self.written_objects[path] = {"size": size, "md5": digest}
 
     def write_bytes(self, path, data, *, asynchronous=False):
         path, data = os.fspath(path), bytes(data)
@@ -888,9 +892,10 @@ def open_file(path, mode="rb", *, encoding="utf-8", **kwargs):
 def copy_file(source, destination):
     """Copy through the common backend; publish local destinations atomically."""
     import shutil
-    destination = os.fspath(destination)
+    source, destination = os.fspath(source), os.fspath(destination)
     client = current_io()
-    if _remote(destination) and (client._record_writes or
+    if _remote(destination) and (
+            (client._record_writes and _remote(source)) or
             (client._write_sink is not None and client._write_sink.matches(destination))):
         write_bytes(destination, read_bytes(source))
         return
@@ -904,8 +909,16 @@ def copy_file(source, destination):
             with _copy_source(source) as (stream, size):
                 _oss_upload(client._oss(), oss.PutObjectRequest(bucket=bucket, key=key), stream, size,
                             filepath=source if not _remote(source) else None)
-                with client._lock:
-                    client.bytes_written += size
+                digest = None
+                if client._record_writes:
+                    # Recording a digest must not turn a checkpoint upload into
+                    # a whole-file allocation. The staged file stays immutable.
+                    md5 = hashlib.md5()
+                    with open(source, "rb") as digest_source:
+                        while chunk := digest_source.read(4 << 20):
+                            md5.update(chunk)
+                    digest = md5.hexdigest()
+            client._record_write(destination, size, digest)
 
         client._ordered_write(destination, perform)
         return
@@ -1057,11 +1070,8 @@ def write_object(path, data, *, overwrite=True, metadata=None):
                                           metadata=metadata, forbid_overwrite=not overwrite)
             def perform():
                 _oss_upload(client._oss(), request, data, len(data))
-                with client._lock:
-                    client.bytes_written += len(data)
-                    if client._record_writes:
-                        client.written_objects[path] = {
-                            "size": len(data), "md5": hashlib.md5(data).hexdigest()}
+                client._record_write(path, len(data),
+                                     hashlib.md5(data).hexdigest() if client._record_writes else None)
             client._ordered_write(path, perform)
         except (oss.exceptions.ServiceError, oss.exceptions.OperationError) as exc:
             error = exc.unwrap() if hasattr(exc, "unwrap") else exc
