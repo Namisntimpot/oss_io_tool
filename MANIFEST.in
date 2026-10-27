@@ -1,0 +1,3 @@
+include EXTRACTION.md
+recursive-include docs *.md
+recursive-include examples *.py

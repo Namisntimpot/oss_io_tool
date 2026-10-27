@@ -1,0 +1,31 @@
+[build-system]
+requires = ["setuptools>=68"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "oss-io-tool"
+version = "0.1.0"
+description = "Unified local, OSS and S3 IO with asynchronous writes and memory adapters"
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = []
+
+[project.optional-dependencies]
+oss = ["alibabacloud-oss-v2>=1.4.1"]
+s3 = ["megfile"]
+images = ["numpy", "Pillow", "imageio", "opencv-python-headless"]
+arrays = ["numpy"]
+torch = ["torch", "safetensors"]
+mesh = ["trimesh", "numpy", "Pillow"]
+mitsuba = ["mitsuba"]
+test = ["pytest>=7", "alibabacloud-oss-v2>=1.4.1", "numpy", "Pillow", "imageio", "opencv-python-headless", "trimesh"]
+
+[project.scripts]
+oss-io = "oss_io_tool.__main__:main"
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+addopts = "-ra"
